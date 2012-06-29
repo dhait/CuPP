@@ -1,8 +1,12 @@
 PROJECT(cupp)
+ENABLE_TESTING()
 
 # load cuda macros
 FIND_PACKAGE(CUDA)
-FIND_PACKAGE(boost)
+FIND_PACKAGE(Boost)
+FIND_PACKAGE(GTest REQUIRED)
+
+include_directories(${GTEST_INCLUDE_DIR})
 
 #SET (CUDA_HOST_COMPILATION_CPP OFF)
 #SET (CUDA_NVCC_FLAGS -D__CUDACC__)
@@ -32,6 +36,9 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include/)
 # build the CuPP library
 # the CuPP library is now header-only, so it doesn't need to be built
 # SUBDIRS(src)
+
+# build the tests
+SUBDIRS(test)
 
 # build the examples
 SUBDIRS(examples)
