@@ -20,7 +20,13 @@
 
 namespace cupp {
 
+
 template< typename T > class shared_device_pointer; // forward declaration to break cycle dependency
+
+template< typename T > class device_ptr; 
+
+template< typename T , unsigned int Flags> class host_ptr; 
+
 
 template <typename T>
 void mem_set(T* device_pointer, int value, const size_t size=1);
@@ -35,6 +41,12 @@ T* malloc(const size_t size=1);
 
 template <typename T>
 void free(T* device_pointer);
+
+template <typename T>
+T* host_alloc(const size_t size=1, unsigned int flags = cudaHostAllocDefault);
+
+template <typename T>
+void host_free(T* host_pointer);
 
 template <typename T>
 void copy_host_to_device(T *destination, const T * const source, size_t count=1);
@@ -106,6 +118,37 @@ void free(T* device_pointer) {
 	}
 }
 
+inline void* host_alloc_ (const size_t size_in_b, unsigned int flags) {
+	void* temp;
+	if (cudaHostAlloc( &temp, size_in_b, flags ) != cudaSuccess) {
+		throw exception::cuda_runtime_error(cudaGetLastError());
+	}
+	return temp;
+}
+
+template<typename T>
+T * host_alloc(const size_t size, unsigned int flags)
+{
+	return static_cast<T*> (host_alloc_(size*sizeof(T), flags)); 
+}
+
+template<typename T>
+void host_free(T* host_pointer)
+{
+	if (cudaFreeHost(host_pointer) != cudaSuccess) {
+		throw exception::cuda_runtime_error(cudaGetLastError());
+	}
+}
+
+template<typename T>
+unsigned int get_host_flags(T * p)
+{
+	unsigned int flags;
+	if (cudaHostGetFlags(&flags, p) != cudaSuccess) {
+		throw exception::cuda_runtime_error(cudaGetLastError());
+	}
+	return flags;
+}
 
 template <typename T>
 void copy_host_to_device(T *destination, const T * const source, size_t count) {

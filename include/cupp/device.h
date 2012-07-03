@@ -20,6 +20,7 @@
 #include "cupp/exception/cuda_runtime_error.h"
 #include "cupp/runtime.h"
 
+#include "boost/utility.hpp"
 
 namespace cupp {
 
@@ -33,7 +34,7 @@ namespace cupp {
  * @brief This class is a handle to a CUDA device. You need it to allocate data, run kernel, ...
  * @warning If you destroy your device object, all data located on it will be destroyed.
  */
-class device {
+class device : private boost::noncopyable {
 	public:
 		typedef int id_t;
 	
@@ -41,23 +42,10 @@ class device {
 		/**
 		 * @brief Generates a default device with no special requirements
 		 */
-		device();
+		device(id_t id = 0);
 
 		/**
-		 * @brief Generates a device with @a major revision number
-		 * @param major The requested major revision number of the device
-		 */
-		explicit device (const int major);
-		
-		/**
-		 * @brief Generates a device with @a major and @a minor revision number
-		 * @param major The requested major revision number of the device
-		 * @param minor The requested minor revision number of the device
-		 */
-		explicit device (const int major, const int minor);
-
-		/**
-		 * @brief Cleans up all ressources associated with the device
+		 * @brief Cleans up all resources associated with the device
 		 */
 		~device();
 
@@ -70,7 +58,7 @@ class device {
 		/**
 		 * @return a unique id for @a this device
 		 */
-		int id() const;
+		int id() const { return id_; }
 
 	public: /***  GET INFORMATION ABOUT THE DEVICE  ***/
 		/**
@@ -148,6 +136,21 @@ class device {
 		 * @return the number of available devices
 		 */
 		static int device_count();
+		/**
+		 * @return the number of available devices
+		 */
+		static int find(const int major, const int minor=-1, const char * name = 0);
+		/**
+		 * @return a pointer to device memory
+		 */
+		template<typename T>
+		T * malloc(size_t size);
+
+		/**
+		 * @brief Frees memory
+		 */
+		template<typename T>
+		void free(T * p);
 
 	private:
 		/**
@@ -163,38 +166,33 @@ class device {
 		 * The properties of this device
 		 */
 		cudaDeviceProp device_prop_;
+		/**
+		  * The id of this device
+		*/
+		id_t id_;
 
 	private:
 }; // class device
 
 
-inline device::device() {
-	real_constructor(1, -1, 0);
-}
+inline device::device(id_t id)
+	: id_(id)
+{
+	if (cudaSetDevice(id) != cudaSuccess)
+		throw exception::no_device();
 
-inline device::device (const int major) {
-	real_constructor(major, -1, 0);
-}
-
-inline device::device (const int major, const int minor) {
-	real_constructor(major, minor, 0);
+	cudaGetDeviceProperties(&device_prop_, id_);
 }
 
 inline device::~device() {
+	cudaSetDevice(id_);
 	cudaThreadExit();
 }
 
-inline void device::real_constructor(const int major, const int minor, const char* name) {
+inline device::id_t device::find(const int major, const int minor, const char* name) {
 	using namespace cupp::exception;
 
-	// check if there is already a device
-	int cur_device;
-	if (cudaGetDevice(&cur_device) == cudaSuccess) {
-		cudaSetDevice(cur_device);
-		cudaGetDeviceProperties(&device_prop_, cur_device);
-		return;
-		//throw too_many_devices_per_thread();
-	}
+	cudaDeviceProp device_prop;
 
 	const int device_cnt = device_count();
 
@@ -204,12 +202,12 @@ inline void device::real_constructor(const int major, const int minor, const cha
 
 	int dev = 0;
 	for (dev = 0; dev < device_cnt; ++dev) {
-		cudaGetDeviceProperties(&device_prop_, dev);
+		cudaGetDeviceProperties(&device_prop, dev);
 		bool take_it = false;
 
 		//check major rev number
 		if (name!=0) {
-			if (std::string(name)==std::string(device_prop_.name)) {
+			if (std::string(name)==std::string(device_prop.name)) {
 				take_it=true;
 			} else {
 				take_it=false;
@@ -218,7 +216,7 @@ inline void device::real_constructor(const int major, const int minor, const cha
 
 		//check major rev number
 		if (major!=-1) {
-			if (major<=device_prop_.major) {
+			if (major<=device_prop.major) {
 				take_it=true;
 			} else {
 				take_it=false;
@@ -227,7 +225,7 @@ inline void device::real_constructor(const int major, const int minor, const cha
 
 		//check minor rev number
 		if (minor!=-1) {
-			if (minor<=device_prop_.minor) {
+			if (minor<=device_prop.minor) {
 				take_it=true;
 			} else {
 				take_it=false;
@@ -242,19 +240,11 @@ inline void device::real_constructor(const int major, const int minor, const cha
 	if (dev == device_cnt) {
 		throw no_supporting_device();
 	}
-
-	cudaSetDevice(dev);
-
+	return dev;
 }
 
 inline void device::sync() const {
 	cupp::thread_synchronize();
-}
-
-inline device::id_t device::id() const {
-	int cur_device;
-	cudaGetDevice(&cur_device);
-	return cur_device;
 }
 
 inline int device::device_count() {
@@ -262,6 +252,20 @@ inline int device::device_count() {
 	cudaGetDeviceCount(&device_cnt);
 
 	return device_cnt;
+}
+
+template<typename T>
+T * device::malloc(size_t size)
+{
+	cudaSetDevice(device::id());
+	return cupp::malloc<T>(size);
+}
+
+template<typename T>
+void device::free(T * p)
+{
+	cudaSetDevice(device::id());
+	cupp::free<T>(p);
 }
 
 } // namespace cupp

@@ -14,6 +14,7 @@
 
 #include <boost/utility.hpp>
 #include <boost/type_traits.hpp>
+#include <boost/mpl/logical.hpp>
 
 namespace cupp {
 
@@ -21,6 +22,7 @@ namespace impl {
 
 using boost::enable_if;
 using boost::disable_if;
+using boost::mpl::or_;
 
 /**
  * @class has_member_transform
@@ -46,6 +48,7 @@ class has_member_transform<R (C::*)(const device &)> {
 
 	public:
 		enum {value = (sizeof(check<C>(0)) == sizeof(char))};
+        typedef has_member_transform<R (C::*)(const device &)> type;
 };
 
 /**
@@ -70,16 +73,19 @@ struct transform_caller {
 	/// instantiated if that.transform() does NOT exists
 	template <typename host_type>
 	static device_type call( const device &d, host_type& that,
-	                          typename disable_if <
-	                            has_member_transform<device_type (host_type::*)(const device&) >
-	                          >::type* = 0 ) {
+	                          typename disable_if < or_<
+	                            has_member_transform<device_type (host_type::*)(const device&) >,
+							    typename boost::is_POD<host_type> >
+								>::type* = 0 ) {
 		UNUSED_PARAMETER(d);
 		return static_cast<device_type>(that);
 	}
 
 	/// instantiated if 'host_type' is a POD
 	template <typename host_type>
-	static device_type& call( const device &d, host_type& that, typename boost::enable_if< boost::is_POD< host_type > >::type* = 0) {
+	static device_type& call( const device &d, host_type& that, 
+							typename boost::enable_if< boost::is_POD< host_type >
+							>::type* = 0) {
 		UNUSED_PARAMETER(d);
 		return that;
 	}
@@ -112,6 +118,7 @@ class has_member_get_device_ref<R (C::*)(const device &)> {
 
 	public:
 		enum {value = (sizeof(check<C>(0)) == sizeof(char))};
+        typedef has_member_get_device_ref<R (C::*)(const device &)> type;
 };
 
 /**
@@ -136,13 +143,10 @@ struct get_device_ref_caller {
 	/// instantiated if host_type::get_device_reference() does NOT exists
 	template <typename host_type>
 	static device_reference<device_type> call( const device &d, host_type& that,
-	                          typename disable_if <
-	                            has_member_get_device_ref <
-				       device_reference<device_type> (host_type::*)(const device&) 
-				                              >
+	                          typename disable_if < or_<
+	                            has_member_get_device_ref <device_reference<device_type> (host_type::*)(const device&) >,
+								typename boost::is_POD<host_type> >
 	                          >::type* = 0 )
-
-
 				  {
 		return cupp::device_reference < device_type > (d, transform_caller<device_type>::call(d, that) );
 	}

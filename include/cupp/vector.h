@@ -682,7 +682,7 @@ class vector {
 		/**
 		 * A pointer to the device on which our data is stored
 		 */
-		mutable device::id_t device_id_;
+		mutable int device_id_;
 }; // class vector
 
 
